@@ -18,6 +18,11 @@ export type LoginInput = z.infer<typeof loginSchema>;
 
 export const signupSchema = z
   .object({
+    nome: z
+      .string()
+      .trim()
+      .min(2, "Informe seu nome (mín. 2 caracteres).")
+      .max(80, "Nome muito longo."),
     email,
     password,
     confirmPassword: z.string().min(1, "Confirme sua senha."),

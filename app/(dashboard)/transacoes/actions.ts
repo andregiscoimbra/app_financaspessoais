@@ -1,9 +1,15 @@
 "use server";
 
+import { addMonths, format, parse } from "date-fns";
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
-import { transacaoSchema, type TransacaoInput } from "@/lib/validators/transactions";
+import {
+  transacaoComParcelasSchema,
+  transacaoSchema,
+  type TransacaoComParcelasInput,
+  type TransacaoInput,
+} from "@/lib/validators/transactions";
 
 type ActionResult<T = undefined> =
   | { ok: true; data?: T }
@@ -21,39 +27,75 @@ async function requireUser() {
 }
 
 export async function criarTransacaoAction(
-  input: TransacaoInput,
-): Promise<ActionResult<{ id: string }>> {
-  const parsed = transacaoSchema.safeParse(input);
+  input: TransacaoComParcelasInput,
+): Promise<ActionResult<{ count: number }>> {
+  const parsed = transacaoComParcelasSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
+  const values = parsed.data;
+
   try {
     const { supabase, user } = await requireUser();
 
-    const { data, error } = await supabase
-      .from("transactions")
-      .insert({
+    // Caminho simples: à vista (sem parcelamento).
+    if (!values.parcelar || !values.parcelas) {
+      const { error } = await supabase.from("transactions").insert({
         user_id: user.id,
-        tipo: parsed.data.tipo,
-        valor: parsed.data.valor,
-        data: parsed.data.data,
-        descricao: parsed.data.descricao,
-        estabelecimento: parsed.data.estabelecimento ?? null,
-        categoria_id: parsed.data.categoria_id,
-        meio_pagamento: parsed.data.meio_pagamento ?? null,
-      })
-      .select("id")
-      .single();
+        tipo: values.tipo,
+        valor: values.valor,
+        data: values.data,
+        descricao: values.descricao,
+        estabelecimento: values.estabelecimento ?? null,
+        categoria_id: values.categoria_id,
+        meio_pagamento: values.meio_pagamento ?? null,
+      });
 
+      if (error) {
+        console.error("Erro ao criar transação:", error);
+        return { ok: false, error: "Não foi possível salvar. Tente novamente." };
+      }
+
+      revalidatePath("/transacoes");
+      revalidatePath("/dashboard");
+      return { ok: true, data: { count: 1 } };
+    }
+
+    // Caminho parcelado: cria N linhas, uma por mês, com valor dividido.
+    const n = values.parcelas;
+    // Divide mantendo 2 casas decimais e joga o arredondamento na última parcela
+    // (evita erro de centavos acumulado).
+    const valorBase = Math.floor((values.valor * 100) / n) / 100;
+    const ultimaParcela = Number((values.valor - valorBase * (n - 1)).toFixed(2));
+
+    const dataBase = parse(values.data, "yyyy-MM-dd", new Date());
+
+    const rows = Array.from({ length: n }).map((_, i) => {
+      const isUltima = i === n - 1;
+      return {
+        user_id: user.id,
+        tipo: values.tipo,
+        valor: isUltima ? ultimaParcela : valorBase,
+        data: format(addMonths(dataBase, i), "yyyy-MM-dd"),
+        descricao: `${values.descricao} (${i + 1}/${n})`,
+        estabelecimento: values.estabelecimento ?? null,
+        categoria_id: values.categoria_id,
+        meio_pagamento: values.meio_pagamento ?? null,
+        parcela_atual: i + 1,
+        parcela_total: n,
+      };
+    });
+
+    const { error } = await supabase.from("transactions").insert(rows);
     if (error) {
-      console.error("Erro ao criar transação:", error);
-      return { ok: false, error: "Não foi possível salvar. Tente novamente." };
+      console.error("Erro ao criar parcelamento:", error);
+      return { ok: false, error: "Não foi possível salvar as parcelas." };
     }
 
     revalidatePath("/transacoes");
     revalidatePath("/dashboard");
-    return { ok: true, data: { id: data.id } };
+    return { ok: true, data: { count: n } };
   } catch (error) {
     console.error(error);
     return { ok: false, error: "Sessão expirada. Faça login novamente." };

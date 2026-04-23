@@ -6,7 +6,7 @@ import { CategoryPieChart } from "@/components/dashboard/charts/category-pie-cha
 import { MonthlyTrendChart } from "@/components/dashboard/charts/monthly-trend-chart";
 import { FiftyThirtyTwentyCard } from "@/components/dashboard/fifty-thirty-twenty-card";
 import { InsightsList } from "@/components/dashboard/insights-list";
-import { MonthSelector } from "@/components/dashboard/month-selector";
+import { PeriodSelector } from "@/components/dashboard/period-selector";
 import { RecentTransactionsCard } from "@/components/dashboard/recent-transactions-card";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
@@ -18,25 +18,30 @@ import {
 } from "@/lib/queries/dashboard";
 import { listTransacoesRecentes } from "@/lib/queries/transactions";
 import { createClient } from "@/lib/supabase/server";
-import { formatRefMonth, parseRefMonth } from "@/lib/utils/dates";
+import { resolvePeriod } from "@/lib/utils/period";
 
 export const metadata = { title: "Dashboard · Finanças Pessoais" };
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  searchParams: { ref?: string };
+  searchParams: { ref?: string; inicio?: string; fim?: string };
 }
 
 export default async function DashboardPage({ searchParams }: PageProps) {
   const supabase = createClient();
-  const refMonth = parseRefMonth(searchParams.ref);
+  const periodo = resolvePeriod(searchParams);
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const primeiroNome =
+    (user?.user_metadata?.nome as string | undefined)?.trim().split(" ")[0]
+    ?? user?.email?.split("@")[0]
+    ?? "você";
+
   const [dados, categorias, budgets, recentes] = await Promise.all([
-    getDashboardData(supabase, refMonth),
+    getDashboardData(supabase, periodo.inicio, periodo.fim, periodo.refMonthDate),
     listCategorias(supabase, { incluirInativas: true }),
     listBudgetsVigentes(supabase),
     listTransacoesRecentes(supabase, 5),
@@ -73,13 +78,17 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     meta: metaPorCategoria[c.id] ?? 0,
   }));
 
-  // Dados para o card 50/30/20 — precisa de (nome, valor) de cada despesa do mês
+  // Dados para o card 50/30/20 — usa o grupo_meta configurado pelo usuário
+  const grupoMetaPorCategoria: Record<string, "necessidades" | "desejos" | null> = {};
+  for (const c of categorias) grupoMetaPorCategoria[c.id] = c.grupo_meta;
+
   const despesasPorNome = gastoPorCategoriaArr.map((g) => ({
     nome: g.nome,
     valor: g.valor,
+    grupo: grupoMetaPorCategoria[g.categoria_id] ?? null,
   }));
 
-  const refMonthKey = formatRefMonth(refMonth);
+  const modoMes = periodo.mode === "month";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -87,25 +96,33 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Olá, {user?.email?.split("@")[0] ?? "você"} 👋
+            Olá, {primeiroNome} 👋
           </h1>
           <p className="text-sm text-muted-foreground">
-            Visão geral do mês selecionado.
+            {modoMes
+              ? "Visão geral do mês selecionado."
+              : "Visão geral do período selecionado."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <MonthSelector refMonth={refMonth} />
+          <PeriodSelector
+            mode={periodo.mode}
+            refMonthKey={periodo.refMonthKey}
+            inicio={periodo.inicio}
+            fim={periodo.fim}
+          />
           <TransactionDialog categorias={categorias} />
         </div>
       </div>
 
       {/* Alertas de orçamento (só aparece se houver categorias em 80%+) */}
-      <BudgetAlerts refMonth={refMonthKey} alerts={budgetAlerts} />
+      <BudgetAlerts refMonth={periodo.refMonthKey} alerts={budgetAlerts} />
 
       {/* Cards de resumo */}
       <SummaryCards
         totaisMes={dados.totaisMes}
         totaisMesAnterior={dados.totaisMesAnterior}
+        comparisonLabel={modoMes ? "vs. mês anterior" : "vs. período anterior"}
       />
 
       {/* Barra de orçamento geral */}
@@ -124,9 +141,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         <FiftyThirtyTwentyCard
           despesas={despesasPorNome}
           receitas={dados.totaisMes.receitas}
-          descricao="Sua distribuição real de gastos no mês, comparada com a regra 50/30/20. A poupança é o que sobrou da receita."
+          descricao={
+            modoMes
+              ? "Sua distribuição real de gastos no mês, comparada com a regra 50/30/20. A poupança é o que sobrou da receita."
+              : "Distribuição de gastos no período selecionado, comparada com a regra 50/30/20."
+          }
         />
-        <InsightsList refMonth={refMonthKey} />
+        <InsightsList refMonth={periodo.refMonthKey} />
       </div>
 
       <RecentTransactionsCard transacoes={recentes} />

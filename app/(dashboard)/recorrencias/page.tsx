@@ -44,9 +44,11 @@ export default async function RecorrenciasPage() {
             <p className="text-xs text-muted-foreground">
               Toda recorrência ativa cria uma transação no dia escolhido de cada mês.
               Dia 31 cai no último dia quando não existe (ex: 28 em fevereiro).
-              Use <strong>Pausar</strong> para suspender temporariamente sem perder a configuração.
-              A geração automática roda uma vez por dia (06:00 UTC, se o cron estiver habilitado).
-              Você também pode rodar manualmente no botão <strong>Executar hoje agora</strong>.
+              Ao cadastrar uma recorrência, as transações dos meses passados
+              (desde a data de início) são criadas automaticamente. Use
+              <strong> Pausar</strong> pra suspender temporariamente sem perder
+              a configuração. Se algo ficou desatualizado, clique em
+              <strong> Sincronizar agora</strong> e o sistema põe tudo em dia.
             </p>
           </div>
         </CardContent>

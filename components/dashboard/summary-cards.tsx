@@ -7,9 +7,15 @@ import { formatBRL, formatPercent } from "@/lib/utils/format";
 interface SummaryCardsProps {
   totaisMes: { receitas: number; despesas: number };
   totaisMesAnterior: { receitas: number; despesas: number };
+  /** Texto exibido abaixo do delta. Default: "vs. mês anterior". */
+  comparisonLabel?: string;
 }
 
-export function SummaryCards({ totaisMes, totaisMesAnterior }: SummaryCardsProps) {
+export function SummaryCards({
+  totaisMes,
+  totaisMesAnterior,
+  comparisonLabel = "vs. mês anterior",
+}: SummaryCardsProps) {
   const saldo = totaisMes.receitas - totaisMes.despesas;
   const saldoAnterior = totaisMesAnterior.receitas - totaisMesAnterior.despesas;
   const taxaPoupanca = totaisMes.receitas > 0 ? saldo / totaisMes.receitas : 0;
@@ -79,6 +85,7 @@ export function SummaryCards({ totaisMes, totaisMesAnterior }: SummaryCardsProps
               delta={c.delta}
               direcaoPositiva={c.direcaoPositiva}
               asPercent={c.label !== "Taxa de poupança"}
+              comparisonLabel={comparisonLabel}
             />
           </CardContent>
         </Card>
@@ -96,16 +103,18 @@ function DeltaLabel({
   delta,
   direcaoPositiva,
   asPercent,
+  comparisonLabel,
 }: {
   delta: number | null;
   direcaoPositiva: "up" | "down";
   asPercent: boolean;
+  comparisonLabel: string;
 }) {
   if (delta === null) {
     return (
       <p className="flex items-center gap-1 text-xs text-muted-foreground">
         <Minus className="h-3 w-3" />
-        sem dados no mês anterior
+        sem dados para comparar
       </p>
     );
   }
@@ -142,7 +151,7 @@ function DeltaLabel({
     >
       <Icon className="h-3 w-3" />
       <span>{label}</span>
-      <span className="font-normal text-muted-foreground">vs. mês anterior</span>
+      <span className="font-normal text-muted-foreground">{comparisonLabel}</span>
     </p>
   );
 }

@@ -59,6 +59,40 @@ export const transacaoSchema = z.object({
 export type TransacaoInput = z.infer<typeof transacaoSchema>;
 
 /**
+ * Schema pra criação com parcelamento. Quando `parcelar` é true, o valor
+ * informado é o TOTAL da compra (será dividido em N parcelas iguais) e a
+ * data informada é a da PRIMEIRA parcela. Os demais campos se repetem.
+ */
+export const transacaoComParcelasSchema = transacaoSchema
+  .extend({
+    parcelar: z.boolean().default(false),
+    parcelas: z.coerce
+      .number()
+      .int()
+      .min(2, "Mínimo 2 parcelas.")
+      .max(60, "Máximo 60 parcelas.")
+      .optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.parcelar && !val.parcelas) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["parcelas"],
+        message: "Informe o número de parcelas.",
+      });
+    }
+    if (val.parcelar && val.tipo !== "despesa") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["parcelar"],
+        message: "Só é possível parcelar despesas.",
+      });
+    }
+  });
+
+export type TransacaoComParcelasInput = z.infer<typeof transacaoComParcelasSchema>;
+
+/**
  * Schema para filtros da listagem (lidos dos searchParams da URL).
  * Todos os campos são opcionais; valores inválidos são silenciosamente
  * descartados (não queremos 500 por causa de uma URL manipulada).

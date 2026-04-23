@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { format } from "date-fns";
+import { format, subDays, differenceInCalendarDays } from "date-fns";
 
-import { lastNMonths, monthRange, prevMonth } from "@/lib/utils/dates";
+import { lastNMonths, monthRange, parseISODateLocal, prevMonth } from "@/lib/utils/dates";
 import type { Categoria, TipoTransacao } from "@/types";
 
 type AnySupabaseClient = SupabaseClient<any, any, any>;
@@ -14,13 +14,19 @@ interface TransacaoParaAgregacao {
 }
 
 export interface DashboardData {
-  /** Totais do mês de referência. */
+  /** Totais do período selecionado. */
   totaisMes: { receitas: number; despesas: number };
-  /** Totais do mês anterior (para calcular delta). */
+  /**
+   * Totais do período de comparação (mês anterior em modo "month", ou
+   * janela imediatamente anterior de mesma duração em modo "range").
+   */
   totaisMesAnterior: { receitas: number; despesas: number };
-  /** Gasto por categoria_id no mês de referência. */
+  /** Gasto por categoria_id no período selecionado. */
   gastoPorCategoria: Record<string, number>;
-  /** Evolução mensal dos últimos 6 meses (ordem cronológica crescente). */
+  /**
+   * Evolução mensal dos últimos 6 meses terminando no `refMonth`.
+   * Usa o mês de referência, não o range customizado.
+   */
   evolucaoMensal: Array<{
     mes: Date;
     receitas: number;
@@ -46,28 +52,42 @@ async function fetchTransacoesDoPeriodo(
   return (data ?? []) as TransacaoParaAgregacao[];
 }
 
+/**
+ * Dados do dashboard para um período arbitrário + mês de referência.
+ *
+ * @param rangeInicio YYYY-MM-DD — início do período analisado (inclusive)
+ * @param rangeFim    YYYY-MM-DD — fim do período analisado (inclusive)
+ * @param refMonth    Date — usado para o gráfico "evolução dos 6 meses"
+ */
 export async function getDashboardData(
   supabase: AnySupabaseClient,
+  rangeInicio: string,
+  rangeFim: string,
   refMonth: Date,
 ): Promise<DashboardData> {
-  // Janelas de tempo
-  const mesAtual = monthRange(refMonth);
-  const mesAnterior = monthRange(prevMonth(refMonth));
+  // Período de comparação: janela imediatamente anterior de mesma duração.
+  const inicioDate = parseISODateLocal(rangeInicio);
+  const fimDate = parseISODateLocal(rangeFim);
+  const diasNoRange = differenceInCalendarDays(fimDate, inicioDate) + 1;
+  const compFim = format(subDays(inicioDate, 1), "yyyy-MM-dd");
+  const compInicio = format(subDays(inicioDate, diasNoRange), "yyyy-MM-dd");
+
+  // 6 meses pro gráfico de evolução — sempre ancorado no refMonth
   const seisMeses = lastNMonths(refMonth, 6);
   const inicio6m = format(seisMeses[0], "yyyy-MM-01");
-  const fim6m = mesAtual.fim;
+  const fim6m = monthRange(refMonth).fim;
 
-  // Tudo em paralelo (3 queries)
-  const [txMes, txMesAnterior, tx6Meses] = await Promise.all([
-    fetchTransacoesDoPeriodo(supabase, mesAtual.inicio, mesAtual.fim),
-    fetchTransacoesDoPeriodo(supabase, mesAnterior.inicio, mesAnterior.fim),
+  // 3 queries em paralelo
+  const [txRange, txComp, tx6Meses] = await Promise.all([
+    fetchTransacoesDoPeriodo(supabase, rangeInicio, rangeFim),
+    fetchTransacoesDoPeriodo(supabase, compInicio, compFim),
     fetchTransacoesDoPeriodo(supabase, inicio6m, fim6m),
   ]);
 
-  // Agregação do mês atual
+  // Agregação do período principal
   const totaisMes = { receitas: 0, despesas: 0 };
   const gastoPorCategoria: Record<string, number> = {};
-  for (const t of txMes) {
+  for (const t of txRange) {
     const v = Number(t.valor);
     if (t.tipo === "receita") totaisMes.receitas += v;
     else {
@@ -76,9 +96,9 @@ export async function getDashboardData(
     }
   }
 
-  // Agregação do mês anterior
+  // Agregação do período de comparação
   const totaisMesAnterior = { receitas: 0, despesas: 0 };
-  for (const t of txMesAnterior) {
+  for (const t of txComp) {
     const v = Number(t.valor);
     if (t.tipo === "receita") totaisMesAnterior.receitas += v;
     else totaisMesAnterior.despesas += v;

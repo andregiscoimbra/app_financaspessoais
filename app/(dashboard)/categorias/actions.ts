@@ -34,6 +34,7 @@ export async function criarCategoriaAction(
       tipo: parsed.data.tipo,
       cor: parsed.data.cor ?? null,
       icone: parsed.data.icone ?? null,
+      grupo_meta: parsed.data.tipo === "despesa" ? (parsed.data.grupo_meta ?? null) : null,
       ativa: true,
     });
 
@@ -71,6 +72,8 @@ export async function atualizarCategoriaAction(
         tipo: parsed.data.tipo,
         cor: parsed.data.cor ?? null,
         icone: parsed.data.icone ?? null,
+        grupo_meta:
+          parsed.data.tipo === "despesa" ? (parsed.data.grupo_meta ?? null) : null,
       })
       .eq("id", id);
 

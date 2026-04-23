@@ -63,7 +63,8 @@ export function BudgetsForm({ despesas, metasAtuais }: BudgetsFormProps) {
     return { total };
   }, [watched]);
 
-  // Agrupa por Necessidade/Desejo pra mostrar no layout
+  // Agrupa por Necessidade/Desejo: usa grupo_meta da categoria (configurado
+  // pelo usuário); fallback pra classificação pelo nome se ainda não tiver.
   const gruposOrdenados: Array<{ grupo: Grupo5030; categorias: Categoria[] }> = useMemo(() => {
     const map: Record<Grupo5030, Categoria[]> = {
       necessidades: [],
@@ -71,7 +72,8 @@ export function BudgetsForm({ despesas, metasAtuais }: BudgetsFormProps) {
       poupanca: [],
     };
     for (const c of despesas) {
-      map[classificar5030(c.nome)].push(c);
+      const grupo: Grupo5030 = c.grupo_meta ?? classificar5030(c.nome);
+      map[grupo].push(c);
     }
     return [
       { grupo: "necessidades", categorias: map.necessidades },

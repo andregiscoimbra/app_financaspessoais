@@ -2,11 +2,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { classificar5030, LABELS_5030, REFERENCIA_5030 } from "@/lib/utils/budget-groups";
 import { cn } from "@/lib/utils/cn";
 import { formatBRL, formatPercent } from "@/lib/utils/format";
-import type { Grupo5030 } from "@/types";
+import type { GrupoMeta, Grupo5030 } from "@/types";
 
 interface CategoriaValor {
   nome: string;
   valor: number;
+  /** Grupo configurado pelo usuário. Se null, cai no fallback pelo nome. */
+  grupo?: GrupoMeta | null;
 }
 
 interface FiftyThirtyTwentyCardProps {
@@ -35,7 +37,9 @@ export function FiftyThirtyTwentyCard({
     poupanca: 0,
   };
   for (const c of despesas) {
-    porGrupo[classificar5030(c.nome)] += c.valor;
+    // Usa o grupo configurado pelo usuário; fallback pra classificação pelo nome.
+    const grupo: Grupo5030 = c.grupo ?? classificar5030(c.nome);
+    porGrupo[grupo] += c.valor;
   }
 
   const mostrarPoupanca = typeof receitas === "number" && receitas > 0;

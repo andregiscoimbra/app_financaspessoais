@@ -7,6 +7,8 @@ export type TipoTransacao = "receita" | "despesa";
 
 export type MeioPagamento = "debito" | "credito" | "pix" | "dinheiro" | "outro";
 
+export type GrupoMeta = "necessidades" | "desejos";
+
 export interface Categoria {
   id: string;
   user_id: string;
@@ -15,6 +17,7 @@ export interface Categoria {
   icone: string | null;
   cor: string | null;
   ativa: boolean;
+  grupo_meta: GrupoMeta | null;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +33,8 @@ export interface Transacao {
   categoria_id: string;
   meio_pagamento: MeioPagamento | null;
   recorrencia_id: string | null;
+  parcela_atual: number | null;
+  parcela_total: number | null;
   created_at: string;
   updated_at: string;
 }

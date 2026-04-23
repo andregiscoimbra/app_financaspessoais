@@ -102,7 +102,17 @@ export function RecurringForm({
         : await criarRecorrenciaAction(values);
 
       if (result.ok) {
-        toast.success(isEdit ? "Recorrência atualizada." : "Recorrência criada.");
+        const backfilled =
+          !isEdit && "data" in result && result.data
+            ? (result.data as { backfilled?: number }).backfilled ?? 0
+            : 0;
+        if (backfilled > 0) {
+          toast.success(
+            `Recorrência criada. ${backfilled} transação${backfilled === 1 ? "" : "ões"} gerada${backfilled === 1 ? "" : "s"} retroativamente.`,
+          );
+        } else {
+          toast.success(isEdit ? "Recorrência atualizada." : "Recorrência criada.");
+        }
         onSuccess?.();
       } else {
         setServerError(result.error);

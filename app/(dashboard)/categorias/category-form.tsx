@@ -45,6 +45,8 @@ export function CategoryForm({
       tipo: (categoria?.tipo ?? tipoInicial ?? "despesa") as CategoriaInput["tipo"],
       cor: categoria?.cor ?? CATEGORY_COLORS[0],
       icone: categoria?.icone ?? "circle",
+      grupo_meta:
+        (categoria?.grupo_meta as CategoriaInput["grupo_meta"]) ?? undefined,
     }),
     [categoria, tipoInicial],
   );
@@ -64,6 +66,7 @@ export function CategoryForm({
   const corAtual = watch("cor") ?? CATEGORY_COLORS[0];
   const iconeAtual = watch("icone") ?? "circle";
   const tipoAtual = watch("tipo");
+  const grupoAtual = watch("grupo_meta");
   const IconPreview = getCategoryIcon(iconeAtual);
 
   function onSubmit(values: CategoriaInput) {
@@ -131,7 +134,11 @@ export function CategoryForm({
           </button>
           <button
             type="button"
-            onClick={() => setValue("tipo", "receita")}
+            onClick={() => {
+              setValue("tipo", "receita");
+              // Receita não tem grupo 50/30/20
+              setValue("grupo_meta", undefined);
+            }}
             disabled={isPending}
             className={cn(
               "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
@@ -144,6 +151,50 @@ export function CategoryForm({
           </button>
         </div>
       </div>
+
+      {/* Grupo 50/30/20 — só para despesa */}
+      {tipoAtual === "despesa" && (
+        <div className="space-y-1.5">
+          <Label>Grupo na regra 50/30/20</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setValue("grupo_meta", "necessidades")}
+              disabled={isPending}
+              className={cn(
+                "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                grupoAtual === "necessidades"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-input bg-background hover:bg-muted",
+              )}
+            >
+              Necessidade
+            </button>
+            <button
+              type="button"
+              onClick={() => setValue("grupo_meta", "desejos")}
+              disabled={isPending}
+              className={cn(
+                "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                grupoAtual === "desejos"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-input bg-background hover:bg-muted",
+              )}
+            >
+              Desejo
+            </button>
+          </div>
+          {errors.grupo_meta ? (
+            <p className="text-xs text-destructive">
+              {errors.grupo_meta.message as string}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Define em qual bloco essa categoria entra no painel de metas.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Cor */}
       <div className="space-y-1.5">

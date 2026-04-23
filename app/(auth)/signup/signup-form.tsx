@@ -24,7 +24,7 @@ export function SignupForm() {
     formState: { errors },
   } = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
-    defaultValues: { email: "", password: "", confirmPassword: "" },
+    defaultValues: { nome: "", email: "", password: "", confirmPassword: "" },
   });
 
   function onSubmit(values: SignupInput) {
@@ -61,6 +61,21 @@ export function SignupForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <div className="space-y-2">
+        <Label htmlFor="nome">Nome</Label>
+        <Input
+          id="nome"
+          type="text"
+          autoComplete="name"
+          placeholder="Como podemos te chamar?"
+          disabled={isPending}
+          {...register("nome")}
+        />
+        {errors.nome && (
+          <p className="text-xs text-destructive">{errors.nome.message}</p>
+        )}
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="email">E-mail</Label>
         <Input

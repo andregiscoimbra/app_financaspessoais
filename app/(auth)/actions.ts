@@ -47,6 +47,10 @@ export async function signupAction(input: SignupInput): Promise<ActionResult> {
     password: parsed.data.password,
     options: {
       emailRedirectTo: `${origin}/auth/callback`,
+      // Salva o nome no user_metadata — acessível via user.user_metadata.nome
+      data: {
+        nome: parsed.data.nome,
+      },
     },
   });
 

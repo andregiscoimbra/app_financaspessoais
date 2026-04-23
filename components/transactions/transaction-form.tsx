@@ -21,9 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils/cn";
+import { formatBRL } from "@/lib/utils/format";
 import {
-  transacaoSchema,
-  type TransacaoInput,
+  transacaoComParcelasSchema,
+  type TransacaoComParcelasInput,
 } from "@/lib/validators/transactions";
 import type { Categoria, Transacao } from "@/types";
 
@@ -57,7 +58,7 @@ export function TransactionForm({
 
   const isEdit = Boolean(transacao);
 
-  const defaultValues = useMemo<TransacaoInput>(
+  const defaultValues = useMemo<TransacaoComParcelasInput>(
     () => ({
       tipo: transacao?.tipo ?? "despesa",
       valor: (transacao?.valor ?? ("" as unknown)) as number,
@@ -66,6 +67,8 @@ export function TransactionForm({
       estabelecimento: transacao?.estabelecimento ?? "",
       categoria_id: transacao?.categoria_id ?? "",
       meio_pagamento: transacao?.meio_pagamento ?? undefined,
+      parcelar: false,
+      parcelas: undefined,
     }),
     [transacao],
   );
@@ -77,20 +80,39 @@ export function TransactionForm({
     watch,
     setValue,
     formState: { errors },
-  } = useForm<TransacaoInput>({
-    resolver: zodResolver(transacaoSchema),
+  } = useForm<TransacaoComParcelasInput>({
+    resolver: zodResolver(transacaoComParcelasSchema),
     defaultValues,
   });
 
   const tipoAtual = watch("tipo");
   const categoriaAtual = watch("categoria_id");
+  const parcelar = watch("parcelar");
+  const parcelas = watch("parcelas");
+  const valorRaw = watch("valor");
 
   const categoriasDoTipo = useMemo(
     () => categorias.filter((c) => c.tipo === tipoAtual && c.ativa),
     [categorias, tipoAtual],
   );
 
-  function onSubmit(values: TransacaoInput) {
+  // Valor parseado de string → número (pra preview do parcelamento)
+  const valorNumerico = useMemo(() => {
+    const v = valorRaw as unknown;
+    if (typeof v === "number") return v;
+    if (typeof v === "string") {
+      const n = Number(v.replace(/\./g, "").replace(",", "."));
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  }, [valorRaw]);
+
+  const valorParcela =
+    parcelar && parcelas && parcelas >= 2 && valorNumerico > 0
+      ? valorNumerico / parcelas
+      : 0;
+
+  function onSubmit(values: TransacaoComParcelasInput) {
     setServerError(null);
     startTransition(async () => {
       const result = isEdit && transacao
@@ -98,7 +120,13 @@ export function TransactionForm({
         : await criarTransacaoAction(values);
 
       if (result.ok) {
-        toast.success(isEdit ? "Transação atualizada." : "Transação criada.");
+        if (isEdit) {
+          toast.success("Transação atualizada.");
+        } else if ("data" in result && result.data && result.data.count > 1) {
+          toast.success(`${result.data.count} parcelas criadas.`);
+        } else {
+          toast.success("Transação criada.");
+        }
         onSuccess?.();
       } else {
         setServerError(result.error);
@@ -115,7 +143,6 @@ export function TransactionForm({
           type="button"
           onClick={() => {
             setValue("tipo", "despesa");
-            // Limpa categoria se ela não for mais válida no novo tipo
             const cat = categorias.find((c) => c.id === categoriaAtual);
             if (cat && cat.tipo !== "despesa") setValue("categoria_id", "");
           }}
@@ -135,6 +162,11 @@ export function TransactionForm({
             setValue("tipo", "receita");
             const cat = categorias.find((c) => c.id === categoriaAtual);
             if (cat && cat.tipo !== "receita") setValue("categoria_id", "");
+            // Parcelamento não se aplica a receita
+            if (parcelar) {
+              setValue("parcelar", false);
+              setValue("parcelas", undefined);
+            }
           }}
           disabled={isPending}
           className={cn(
@@ -165,13 +197,98 @@ export function TransactionForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="data">Data</Label>
+          <Label htmlFor="data">
+            {parcelar ? "Data da 1ª parcela" : "Data"}
+          </Label>
           <Input id="data" type="date" disabled={isPending} {...register("data")} />
           {errors.data && (
             <p className="text-xs text-destructive">{errors.data.message}</p>
           )}
         </div>
       </div>
+
+      {/* Parcelamento — só para despesas, só ao criar (não faz sentido editar parcela isolada) */}
+      {tipoAtual === "despesa" && !isEdit && (
+        <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+          <div className="space-y-1.5">
+            <Label>Forma de pagamento</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setValue("parcelar", false);
+                  setValue("parcelas", undefined);
+                }}
+                disabled={isPending}
+                className={cn(
+                  "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  !parcelar
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-input bg-background hover:bg-muted",
+                )}
+              >
+                À vista
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setValue("parcelar", true);
+                  if (!parcelas) setValue("parcelas", 2);
+                }}
+                disabled={isPending}
+                className={cn(
+                  "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  parcelar
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-input bg-background hover:bg-muted",
+                )}
+              >
+                Parcelado
+              </button>
+            </div>
+          </div>
+
+          {parcelar && (
+            <div className="space-y-1.5">
+              <Label htmlFor="parcelas">Número de parcelas</Label>
+              <Controller
+                control={control}
+                name="parcelas"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ? String(field.value) : undefined}
+                    onValueChange={(v) => field.onChange(Number(v))}
+                    disabled={isPending}
+                  >
+                    <SelectTrigger id="parcelas">
+                      <SelectValue placeholder="Quantas parcelas?" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-56">
+                      {Array.from({ length: 23 }, (_, i) => i + 2).map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n}x
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.parcelas && (
+                <p className="text-xs text-destructive">
+                  {errors.parcelas.message as string}
+                </p>
+              )}
+              {valorParcela > 0 && parcelas && (
+                <p className="text-xs text-muted-foreground">
+                  Serão criadas <strong>{parcelas}</strong> transações de{" "}
+                  <strong>{formatBRL(valorParcela)}</strong>, uma por mês,
+                  começando na data informada.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="categoria_id">Categoria</Label>
@@ -294,6 +411,8 @@ export function TransactionForm({
             </>
           ) : isEdit ? (
             "Salvar alterações"
+          ) : parcelar && parcelas ? (
+            `Criar ${parcelas} parcelas`
           ) : (
             "Salvar transação"
           )}

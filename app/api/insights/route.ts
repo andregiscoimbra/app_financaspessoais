@@ -6,7 +6,7 @@ import { listBudgetsVigentes } from "@/lib/queries/budgets";
 import { listCategorias } from "@/lib/queries/categories";
 import { gastoPorCategoriaComNome, getDashboardData } from "@/lib/queries/dashboard";
 import { createClient } from "@/lib/supabase/server";
-import { formatRefMonth, parseRefMonth } from "@/lib/utils/dates";
+import { formatRefMonth, monthRange, parseRefMonth } from "@/lib/utils/dates";
 import { formatMonthYear } from "@/lib/utils/format";
 import { insightsArraySchema } from "@/lib/validators/insights";
 import { subMonths } from "date-fns";
@@ -71,9 +71,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 5. Busca dados para o prompt
+  // 5. Busca dados para o prompt (sempre o mês inteiro de referência)
+  const { inicio: mesInicio, fim: mesFim } = monthRange(refMonth);
   const [dashboardData, categorias, budgets] = await Promise.all([
-    getDashboardData(supabase, refMonth),
+    getDashboardData(supabase, mesInicio, mesFim, refMonth),
     listCategorias(supabase, { incluirInativas: true }),
     listBudgetsVigentes(supabase),
   ]);
